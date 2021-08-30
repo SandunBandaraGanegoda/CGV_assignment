@@ -1,8 +1,8 @@
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="UTF-8"?>
 <nsbm>
     <students>
         <batches>
-            <15>
+            <batch_15>
                 <student>
                     <index>10000409</index>
                     <name>M S Dilshankia Perera</name>
@@ -27,7 +27,7 @@
                     <index>10009306</index>
                     <name>Hanasa Anuradha Wickramanayake</name>
                 </student>
-            </15>
+            </batch_15>
         </batches>
     </students>
 </nsbm>

@@ -1,6 +1,8 @@
 import os
 import cv2
 import pytesseract
+import xmltodict
+
 import numpy as np
 
 class FileHandler:
@@ -8,10 +10,10 @@ class FileHandler:
     def __init__(self):
         pass
 
-    def read_image_file(self, dir_path, file_name):
-        print(f"Reading image file {file_name}")
+    def read_image_file(self, file_path):
+        print(f"Reading image file {file_path}")
         self.image = cv2.imread(
-            os.path.join(dir_path, file_name),
+            file_path,
         )
 
     def write_image_file(self, dir_path, file_name):
@@ -20,6 +22,10 @@ class FileHandler:
             self.image,
         )
 
+    def read_xml_file(self, file_path):
+        with open(file_path) as xml_file:
+            data = xml_file.read()
+        return xmltodict.parse(data)
 
 
 class TesseractOcrParser:
@@ -43,5 +49,22 @@ class TesseractOcrParser:
         parsed_value = pytesseract.image_to_string(
             image, config=self.config,
         )
-        print(f"Original OCR parsed value : {parsed_value}")
+        # print(f"OCR parsed value before preprocess : {parsed_value}")
         return self._process_parsed_value(parsed_value)
+
+    def get_int_from_image(self, image):
+        image = self._preprocess_image(image)
+        parsed_value = pytesseract.image_to_string(
+            image, config=self.config,
+        )
+        return int("".join([
+            ltr for ltr in parsed_value if ltr.isnumeric()
+        ]))
+
+
+# class ImageProcessUtil:
+
+#     def __init__(self):
+#         pass
+
+#     def 

@@ -1,10 +1,10 @@
 import os
 import cv2
+import argparse
 import numpy as np
-from numpy.lib import utils
 
 from models import Student
-from utils import TesseractOcrParser
+from utils import TesseractOcrParser, FileHandler
 
 WARP_DIR_NAME = "warp_images"
 BINARY_DIR_NAME ="binary_images"
@@ -13,6 +13,10 @@ signing_sheets = "signing_sheet_1"
 COLUMN_IDENTIFIED_DIR_NAME = "column_identify"
 CROPPED_IMG_DIR_NAME = "cropped_img"
 
+
+STUDENT_NO = "studentno"
+STUDENT_NAME = "studentname"
+SIGNATURE =  "signature"
 
 def drawHoughLines(image, lines, size, color):
     size = size if len(lines) > size else len(lines)
@@ -137,9 +141,17 @@ def get_contours_under_region(region_coordinates, contours):
         )
         if (x > region_x_min) and ((x+width) < region_x_max) and (y > region_y_min) and ((y+heigth) < region_y_max):
             detected_contours.append(contour)
-    if len(detected_contours) == 0: raise Exception("Error no contours detected under the region coordinates")
+    # if len(detected_contours) == 0:
+    #     return []
+        # raise Exception("Error no contours detected under the region coordinates")
     return detected_contours
 
+def is_inside_region(contour_coordinates, region_coordinates):
+    x_min, y_min, x_max, y_max = contour_coordinates
+    region_x_min, region_y_min, region_x_max, region_y_max = region_coordinates
+    if (x_min >= region_x_min) and (y_min >= region_y_min) and (x_max <= region_x_max) and (y_max <= region_y_max):
+        return True
+    return False
 
 def get_student_region(contours):
     # TODO: Remove large contour of page with area validation
@@ -159,51 +171,69 @@ def get_student_region(contours):
 def parse_student_details(image, contours, region_coordinates, op_path):
     ocrParser = TesseractOcrParser()
     expected_column_name = [
-        "studentno", "studentname", "signature",
+        STUDENT_NO,
+        # STUDENT_NAME,
+        SIGNATURE,
     ]
-    record_coordinate = None
-    padding = 20
+    padding = 30
     region_details = {}
     region_x_min, region_y_min, region_x_max, region_y_max = region_coordinates
-    start_x, start_y, start_w, start_h = cv2.boundingRect(contours[0])
-    for contour in contours[:5]:
-        x, y, w, h = cv2.boundingRect(contour)
-        # image = cv2.rectangle(image, (x, y), (x+w, y+h), (255, 0, 0), 5)
-        # cropped_cell = image[y-10: y+h+10, x-10: x+w+10]
-        cropped_cell = image[y+2: y+h-2, x+2: x+w-2]
-        ocr_parsed_text = ocrParser.get_string_from_image(cropped_cell)
-        cv2.imwrite(os.path.join(op_path, f"cropped_image_{contours.index(contour)}.jpeg"), cropped_cell)
-        
-        if ocr_parsed_text.lower() in expected_column_name:
-            print(f"Matched ocr : {ocr_parsed_text.lower()}")
-            region_details[ocr_parsed_text.lower()] = {
-                "coordinates" : (x - padding, y + h - padding, x + w + padding, region_y_max + padding)
-            }
-            
-            if len(region_details.keys()) == 3: break 
-    # cv2.imwrite(os.path.join(op_path, f"complete_image.jpeg"), image)
-    print(f"Region Details : \n{region_details}\n")
-    return region_details
-    # record_by_row = []
-    # # After removing the header column from contour table
-    # student_record_contours = get_contours_under_region(
-    #     start_x+padding, start_y+start_w+padding, region_x_max, region_y_max
-    # )
     
-    # while len(student_record_contours) >= 5:
-    #     start_x, start_y, w, h = cv2.boundingRect(student_record_contours[0])
-    #     record_contours = get_contours_under_region(
-    #         (start_x- padding, start_y - padding, region_x_max+padding, start_y+start_h+padding)
-    #     )
-    #     for record in record_contours:
-    #         x, y, w, h = cv2.boundingRect(contour)
-    #         cropped_cell = image[y-10: y+h+10, x-10: x+w+10]
-    #         parsed_value = ocrParser.get_string_from_image(cropped_cell)
-    #         # TODO: PARSE the record using the student_no, student_name and signature region
-    #         # Validate the value with xml values
+    for column in expected_column_name:
+        for contour in contours[:5]:
+            x, y, w, h = cv2.boundingRect(contour)
+            cropped_cell = image[y+2: y+h-2, x+2: x+w-2]
+            ocr_parsed_text = ocrParser.get_string_from_image(cropped_cell)
+            if set(column).issubset(set(ocr_parsed_text.lower())):
+                print(f"Matched OCR : {ocr_parsed_text.lower()}")
+                region_details[column] = {
+                    "coordinates" : (x - padding, y + h - padding, x + w + padding, region_y_max + padding)
+                }
 
-    #         student_record_contours.remove(record)
-        
+                if column == STUDENT_NO:
+                    print(f"Setting studentno has start coordinates: {(x, y + h , w, h)}")
+                    start_x, start_y, start_w, start_h = x, y, w, h
+                if len(region_details.keys()) == 3: break
+    record_by_row = []
+    # After removing the header column from contour table
+    coord = (start_x-padding, (start_y+start_h)-padding, region_x_max+padding, region_y_max+padding)
+    print("Detecting student record region")
+    student_record_contours = get_contours_under_region(
+        coord,
+        contours
+    )
+    start_x, start_y, w, h = cv2.boundingRect(student_record_contours[0])
+    
+    while len(student_record_contours) > 2:
+        record_contours = get_contours_under_region(
+            (start_x-padding, start_y-padding , region_x_max+padding, start_y+start_h+padding),
+            contours
+        )
+        details = {}
+        for record in record_contours:
+            x, y, w, h = cv2.boundingRect(record)
+            if is_inside_region((x, y, x+w, y+h), (region_details["studentno"]["coordinates"])):
+                details["studentno"] = ocrParser.get_int_from_image(
+                    image[y: y+h, x: x+w]
+                )
+                start_x, start_y = x, y+h
+                print("Found cell under student no region")
+            if is_inside_region((x, y, x+w, y+h), (region_details["signature"]["coordinates"])):
+                # TODO: Validate signature image with the size with average size
+                details["signature"] = [x, y, x+w, y+h]
+                print("Found cell under signature region")
+        record_by_row.append(details)
+        coord = (start_x-padding, start_y-padding, region_x_max+padding, region_y_max+padding)
+
+        student_record_contours = get_contours_under_region(
+            coord,
+            contours
+        )
+
+    return record_by_row
+
+
+
     # print(f"After parsing the length of student record conours {len(student_record_contours)}\n")
 
 
@@ -223,76 +253,54 @@ def parse_student_details(image, contours, region_coordinates, op_path):
 
 if __name__ == "__main__":
 
-    fileName = "1.jpeg"
-    in_file = "page.jpg"
-    pre_file ="pre.png"
-    out_file ="out.png"
-    # original_dir_path = r"/home/ArunaSudhan/Documents/NSBM Lec/CGV/Assignment/code_base/images"
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument("image", help="Student signing sheet image")
+    argument_parser.add_argument("xml", help="Xml file with student details")
+    arguments = argument_parser.parse_args()
+
+    assert os.path.isfile(arguments.image) and os.path.basename(arguments.image).split(".")[1] in ["jpeg", "png"], "Image argument should be image file"
+    assert os.path.isfile(arguments.xml) and os.path.basename(arguments.xml).split(".")[1] == "xml", "Image argument should be image file"
+
+    fileHandler = FileHandler()
+    xmlData = fileHandler.read_xml_file(arguments.xml)
+    student_xml_data = xmlData["nsbm"]["students"]["batches"]["batch_15"]["student"]
 
     current_working_dir = os.getcwd()
-    original_dir_path = os.path.join(os.getcwd(), "images")
-
     output_dir_path = os.path.join(current_working_dir, "output")
     if not os.path.exists(output_dir_path):
         os.makedirs(output_dir_path)
     
 
-    img = cv2.imread(
-        os.path.join(original_dir_path, fileName)
+    original_image = cv2.imread(
+        arguments.image
     )
 
-    aligned_image = preprocess_image(img)
+    aligned_image = preprocess_image(original_image)
 
     contours, boundingBoxes = detect_tables_lines(aligned_image)
     region_cooridnates, student_region_contours = get_student_region(
         contours,
     )
 
-    region_details = parse_student_details(
+    students_details = parse_student_details(
         aligned_image,
         student_region_contours, # Retrieves the coordinates under the region
         region_cooridnates, 
         output_dir_path
     )
+    print(f"Student details : \n {students_details}\n")
 
-
-    # TODO TO TEST THE REGION AFTER PARSING FOR TEXT
-    color_rank = {"studentno": (0, 0, 255), "studentname": (0, 255, 0), "signature": (255, 0, 0)}
-    image = aligned_image.copy()
-    for region in region_details.keys():
-        if region_details[region] is not None:
-            image = cv2.rectangle(
-                image, 
-                (region_details[region]["coordinates"][0], region_details[region]["coordinates"][1]), 
-                (region_details[region]["coordinates"][2], region_details[region]["coordinates"][3]), 
-                color_rank[region], 
-                5,
+    detected_students = {
+        int(student["studentno"]): student["signature"] for student in students_details
+    } 
+    for student in student_xml_data:
+        # student_record = dict(student)
+        index = int(student["index"])
+        if index in detected_students.keys():
+            print(f"Found {index} : {detected_students[index]}")
+            x_min, y_min, x_max, y_max = detected_students[index]
+            cropped_signature = aligned_image[y_min:y_max, x_min:x_max]
+            cv2.imwrite(
+                os.path.join(output_dir_path, f"{index}.jpeg"),
+                cropped_signature
             )
-
-    cv2.imwrite(
-        os.path.join(output_dir_path, f"complete_image.jpeg"),
-        image
-    )
-
-    
-    # pre_processed = pre_process_image(img, pre_file)
-    # text_boxes = find_text_boxes(pre_processed)
-    # cells = find_table_in_boxes(text_boxes)
-    # hor_lines, ver_lines = build_lines(cells)
-
-    # # Visualize the result
-    # vis = img.copy()
-
-    # # for box in text_boxes:
-    # #     (x, y, w, h) = box
-    # #     cv2.rectangle(vis, (x, y), (x + w - 2, y + h - 2), (0, 255, 0), 1)
-
-    # for line in hor_lines:
-    #     [x1, y1, x2, y2] = line
-    #     cv2.line(vis, (x1, y1), (x2, y2), (255, 0, 0), 5)
-
-    # for line in ver_lines:
-    #     [x1, y1, x2, y2] = line
-    #     cv2.line(vis, (x1, y1), (x2, y2), (0, 0, 255), 5)
-
-    # cv2.imwrite(out_file, vis)
