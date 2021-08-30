@@ -5,6 +5,7 @@ import numpy as np
 
 from models import Student
 from utils import TesseractOcrParser, FileHandler
+from database import StudentAttendanceDatabase
 
 WARP_DIR_NAME = "warp_images"
 BINARY_DIR_NAME ="binary_images"
@@ -264,6 +265,10 @@ if __name__ == "__main__":
     fileHandler = FileHandler()
     xmlData = fileHandler.read_xml_file(arguments.xml)
     student_xml_data = xmlData["nsbm"]["students"]["batches"]["batch_15"]["student"]
+
+    # Creating db instance
+    attendanceDatabase = StudentAttendanceDatabase()
+
 
     current_working_dir = os.getcwd()
     output_dir_path = os.path.join(current_working_dir, "output")
