@@ -62,9 +62,30 @@ class TesseractOcrParser:
         ]))
 
 
-# class ImageProcessUtil:
+class ImageProcessUtil:
 
-#     def __init__(self):
-#         pass
+    def __init__(self):
+        pass
 
-#     def 
+    def _gray_scale_image(self, image):
+        return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    def remove_noise_using_morphology(self, image, method=cv2.MORPH_CLOSE, kernel_size=(3,3)):
+        print(f"Image Process: removing noise using {method}")
+        kernel = np.ones(kernel_size, np.uint8)
+        return cv2.morphologyEx(image, method, kernel)
+
+
+    def get_black_and_white_image(self, image):
+        print(f"Image Process: processing for B&W image")
+        ret,bw_image = cv2.threshold(
+            self._gray_scale_image(image),
+            127,
+            255,
+            cv2.THRESH_BINARY
+        )
+        return bw_image
+
+    def histogram_values_for_pixels(self, image, pixels=[0,255]):
+        hist, bins = np.histogram(image.flatten(), 256, pixels)
+        return [ hist[pixel_value] for pixel_value in pixels ]
