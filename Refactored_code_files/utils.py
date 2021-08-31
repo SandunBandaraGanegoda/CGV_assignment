@@ -49,7 +49,7 @@ class TesseractOcrParser:
         parsed_value = pytesseract.image_to_string(
             image, config=self.config,
         )
-        # print(f"OCR parsed value before preprocess : {parsed_value}")
+        # print(f"BEFORE RETURN OCR parsed STR value : {parsed_value}")
         return self._process_parsed_value(parsed_value)
 
     def get_int_from_image(self, image):
@@ -57,8 +57,9 @@ class TesseractOcrParser:
         parsed_value = pytesseract.image_to_string(
             image, config=self.config,
         )
+        print(f"BEFORE RETURN OCR parsed INT value : {parsed_value}")
         return int("".join([
-            ltr for ltr in parsed_value if ltr.isnumeric()
+            ltr for ltr in parsed_value if ltr.isnumeric() or ltr.isascii()
         ]))
 
 

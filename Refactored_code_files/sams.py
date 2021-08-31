@@ -176,7 +176,7 @@ def parse_student_details(image, contours, region_coordinates, op_path):
         # STUDENT_NAME,
         SIGNATURE,
     ]
-    padding = 30
+    padding = 40
     region_details = {}
     region_x_min, region_y_min, region_x_max, region_y_max = region_coordinates
     
@@ -190,11 +190,11 @@ def parse_student_details(image, contours, region_coordinates, op_path):
                 region_details[column] = {
                     "coordinates" : (x - padding, y + h - padding, x + w + padding, region_y_max + padding)
                 }
-
                 if column == STUDENT_NO:
+                    print(f"\nPArsed value student no : {ocr_parsed_text.lower()} \n")
                     print(f"Setting studentno has start coordinates: {(x, y + h , w, h)}")
                     start_x, start_y, start_w, start_h = x, y, w, h
-                if len(region_details.keys()) == 3: break
+                if len(region_details.keys()) == 2: break
     record_by_row = []
     # After removing the header column from contour table
     coord = (start_x-padding, (start_y+start_h)-padding, region_x_max+padding, region_y_max+padding)
@@ -203,13 +203,16 @@ def parse_student_details(image, contours, region_coordinates, op_path):
         coord,
         contours
     )
-    start_x, start_y, w, h = cv2.boundingRect(student_record_contours[0])
-    
+    index = 0
+    start_x, start_y = start_x, (start_y+start_h) 
     while len(student_record_contours) > 2:
         record_contours = get_contours_under_region(
             (start_x-padding, start_y-padding , region_x_max+padding, start_y+start_h+padding),
             contours
         )
+
+        # img = cv2.rectangle(image, (start_x- padding, start_y-padding), (region_x_max+padding, start_y+start_h+padding), (0, 0, 255), 5)
+        # cv2.imwrite(os.path.join(op_path, f"draw_{index}.jpeg"), img)
         details = {}
         for record in record_contours:
             x, y, w, h = cv2.boundingRect(record)
@@ -230,7 +233,9 @@ def parse_student_details(image, contours, region_coordinates, op_path):
             coord,
             contours
         )
+        index+=1
 
+        
     return record_by_row
 
 
@@ -305,7 +310,7 @@ if __name__ == "__main__":
             print(f"Found {index} : {detected_students[index]}")
             x_min, y_min, x_max, y_max = detected_students[index]
             cropped_signature = aligned_image[y_min:y_max, x_min:x_max]
-            cv2.imwrite(
-                os.path.join(output_dir_path, f"{index}.jpeg"),
-                cropped_signature
-            )
+            # cv2.imwrite(
+            #     os.path.join(output_dir_path, f"{index}.jpeg"),
+            #     cropped_signature
+            # )
