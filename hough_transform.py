@@ -88,7 +88,8 @@ binary_img_list={}
 for img_name in img_list.keys():
 	load_img = img_list[img_name]
 	gray = cv.cvtColor(load_img,cv.COLOR_BGR2GRAY) 
-	edges = cv.Canny(gray,60,120,apertureSize = 3)
+	medi_blur = cv.medianBlur(gray,5)
+	edges = cv.Canny(medi_blur,60,120,apertureSize = 3)
 	lines = cv.HoughLines(edges,1,np.pi/180,40)
 	print(lines.shape)
 
@@ -107,7 +108,7 @@ for img_name in img_list.keys():
 	
 	
 	print(x1,y1,x2,y2,x0,y0)
-	# cv.line(img_list[i],(x1,y1),(x2,y2),(0,0,255),3)
+	# cv.line(img_list[img_name],(x1,y1),(x2,y2),(0,0,255),3)
 	
 	print('theta',theta)
 	# print(img_list[i].shape)
@@ -122,18 +123,35 @@ for img_name in img_list.keys():
 	# otsu
 	# median = cv.medianBlur(cv.cvtColor(rotated,cv.COLOR_BGR2GRAY),5)
 	ret,bw_img = cv.threshold(cv.cvtColor(rotated,cv.COLOR_BGR2GRAY),128,255,cv.THRESH_BINARY)
-	thresh = cv.threshold(bw_img, 128, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1] 
+	# thresh = cv.threshold(bw_img, 128, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)[1] 
+	rgb_planes = cv.split(rotated)
 
-	binary_img_list[img_name] =thresh
+	result_planes = []
+	result_norm_planes = []
+	for plane in rgb_planes:
+		dilated_img = cv.dilate(plane, np.ones((5,5), np.uint8))
+		bg_img = cv.medianBlur(dilated_img, 21)
+		diff_img = cv.absdiff(plane, bg_img)
+		norm_img = cv.normalize(diff_img,None, alpha=0, beta=255, norm_type=cv.NORM_MINMAX, dtype=cv.CV_8UC1)
+		result_planes.append(diff_img)
+		result_norm_planes.append(norm_img)
+
+	result = cv.merge(result_planes)
+	result_norm = cv.merge(result_norm_planes)
+		
+
+	binary_img_list[img_name] =result_norm
 
 	cv.imwrite(path_warp_img+"/"+img_name,rotated)
 	print(img_name)
-	cv.imwrite(path_binary_img+"/"+img_name,thresh)
+	cv.imwrite(path_binary_img+"/"+img_name,result_norm)
 
 
 	# Boxes Drawing
 	# Defining a kernel length
 	kernel_length = np.array(rotated).shape[1]//80
+	# kernel_length=5
+	print("kernel_length",kernel_length)
 
 	# A verticle kernel of (1 X kernel_length), which will detect all the verticle lines from the image.
 	verticle_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, kernel_length))
@@ -145,11 +163,11 @@ for img_name in img_list.keys():
 	kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
 
 	# Morphological operation to detect vertical lines from an image
-	img_temp1 = cv.erode(thresh, verticle_kernel, iterations=3)
+	img_temp1 = cv.erode(result_norm, verticle_kernel, iterations=3)
 	verticle_lines_img = cv.dilate(img_temp1, verticle_kernel, iterations=3)
 	cv.imwrite(path_column_identify_img+"/"+img_name,verticle_lines_img)
 	# Morphological operation to detect horizontal lines from an image
-	img_temp2 = cv.erode(thresh, hori_kernel, iterations=3)
+	img_temp2 = cv.erode(result_norm, hori_kernel, iterations=3)
 	horizontal_lines_img = cv.dilate(img_temp2, hori_kernel, iterations=3)
 	cv.imwrite(path_column_identify_img+"/"+img_name,horizontal_lines_img)
 
@@ -159,7 +177,8 @@ for img_name in img_list.keys():
 	# This function helps to add two image with specific weight parameter to get a third image as summation of two image.
 	img_final_bin = cv.addWeighted(verticle_lines_img, alpha, horizontal_lines_img, beta, 0.0)
 	img_final_bin = cv.erode(~img_final_bin, kernel, iterations=2)
-	(thresh, img_final_bin) = cv.threshold(img_final_bin, 128,255, cv.THRESH_BINARY | cv.THRESH_OTSU)
+	img_final_bin = cv.cvtColor(img_final_bin,cv.COLOR_BGR2GRAY)
+	(result_norm, img_final_bin) = cv.threshold(img_final_bin, 128,255, cv.THRESH_BINARY | cv.THRESH_OTSU)
 	cv.imwrite(path_column_identify_img+"/"+img_name,img_final_bin)
 
 	# Find contours for image, which will detect all the boxes
