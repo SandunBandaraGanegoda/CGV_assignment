@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsbm>
+    <students>
+        <batches>
+            <batch_15>
+                <student>
+                    <index>10000409</index>
+                    <name>M S Dilshankia Perera</name>
+                </student>
+                <student>
+                    <index>10009301</index>
+                    <name>C W M A Shehan Abeyrathne</name>
+                </student>
+                <student>
+                    <index>10009302</index>
+                    <name>B A K M Chithrananda</name>
+                </student>
+                <student>
+                    <index>10009303</index>
+                    <name>W Shashini Minosha De Silva</name>
+                </student>
+                <student>
+                    <index>10009304</index>
+                    <name>K L Udara Madurange Liyanage</name>
+                </student>
+                <student>
+                    <index>10009306</index>
+                    <name>Hanasa Anuradha Wickramanayake</name>
+                </student>
+            </batch_15>
+        </batches>
+    </students>
+</nsbm>
