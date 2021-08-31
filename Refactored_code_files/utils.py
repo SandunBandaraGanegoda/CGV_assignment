@@ -57,7 +57,7 @@ class TesseractOcrParser:
         parsed_value = pytesseract.image_to_string(
             image, config=self.config,
         )
-        print(f"BEFORE RETURN OCR parsed INT value : {parsed_value}")
+        # print(f"BEFORE RETURN OCR parsed INT value : {parsed_value}")
         return int("".join([
             ltr for ltr in parsed_value if ltr.isnumeric() or ltr.isascii()
         ]))
@@ -72,13 +72,13 @@ class ImageProcessUtil:
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     def remove_noise_using_morphology(self, image, method=cv2.MORPH_CLOSE, kernel_size=(3,3)):
-        print(f"Image Process: removing noise using {method}")
+        print(f"Image Process: removing noise using {method}\n")
         kernel = np.ones(kernel_size, np.uint8)
         return cv2.morphologyEx(image, method, kernel)
 
 
     def get_black_and_white_image(self, image):
-        print(f"Image Process: processing for B&W image")
+        print(f"Image Process: processing for B&W image\n")
         ret,bw_image = cv2.threshold(
             self._gray_scale_image(image),
             127,
@@ -90,3 +90,10 @@ class ImageProcessUtil:
     def histogram_values_for_pixels(self, image, pixels=[0,255]):
         hist, bins = np.histogram(image.flatten(), 256, pixels)
         return [ hist[pixel_value] for pixel_value in pixels ]
+
+
+    def is_signature_valid(self, cropped_bw_image):
+        values = self.histogram_values_for_pixels(
+            self.remove_noise_using_morphology(cropped_bw_image)
+        )
+        return values[0]/np.sum(values) > 0.02

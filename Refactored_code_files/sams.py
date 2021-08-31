@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 
 from models import Student
-from utils import TesseractOcrParser, FileHandler
+from utils import TesseractOcrParser, FileHandler, ImageProcessUtil
 from database import StudentAttendanceDatabase
 
 WARP_DIR_NAME = "warp_images"
@@ -126,7 +126,6 @@ def detect_tables_lines(image):
     img_final_bin = cv2.addWeighted(verticle_lines_img, alpha, horizontal_lines_img, beta, 0.0)
     img_final_bin = cv2.erode(~img_final_bin, kernel, iterations=2)
     (thresh, img_final_bin) = cv2.threshold(img_final_bin, 128,255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-
     # Find contours for image, which will detect all the boxes
     contours, hierarchy = cv2.findContours(img_final_bin, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     # Sort all the contours by top to bottom.
@@ -191,7 +190,6 @@ def parse_student_details(image, contours, region_coordinates, op_path):
                     "coordinates" : (x - padding, y + h - padding, x + w + padding, region_y_max + padding)
                 }
                 if column == STUDENT_NO:
-                    print(f"\nPArsed value student no : {ocr_parsed_text.lower()} \n")
                     print(f"Setting studentno has start coordinates: {(x, y + h , w, h)}")
                     start_x, start_y, start_w, start_h = x, y, w, h
                 if len(region_details.keys()) == 2: break
@@ -214,6 +212,7 @@ def parse_student_details(image, contours, region_coordinates, op_path):
         # img = cv2.rectangle(image, (start_x- padding, start_y-padding), (region_x_max+padding, start_y+start_h+padding), (0, 0, 255), 5)
         # cv2.imwrite(os.path.join(op_path, f"draw_{index}.jpeg"), img)
         details = {}
+        print("Detecting student no and signature region in the table ..")
         for record in record_contours:
             x, y, w, h = cv2.boundingRect(record)
             if is_inside_region((x, y, x+w, y+h), (region_details["studentno"]["coordinates"])):
@@ -221,11 +220,11 @@ def parse_student_details(image, contours, region_coordinates, op_path):
                     image[y: y+h, x: x+w]
                 )
                 start_x, start_y = x, y+h
-                print("Found cell under student no region")
+                # print("Found cell under student no region")
             if is_inside_region((x, y, x+w, y+h), (region_details["signature"]["coordinates"])):
                 # TODO: Validate signature image with the size with average size
                 details["signature"] = [x, y, x+w, y+h]
-                print("Found cell under signature region")
+                # print("Found cell under signature region")
         record_by_row.append(details)
         coord = (start_x-padding, start_y-padding, region_x_max+padding, region_y_max+padding)
 
@@ -234,28 +233,8 @@ def parse_student_details(image, contours, region_coordinates, op_path):
             contours
         )
         index+=1
-
-        
     return record_by_row
 
-
-
-    # print(f"After parsing the length of student record conours {len(student_record_contours)}\n")
-
-
-
-            # # if count == 5:   break
-            # count += 1
-            # image = cv2.rectangle(image, (x, y), (x+w, y+h), (0, 0, 255), 5)
-            # # cropped_cell = image[y-2: y+h+2, x-2: x+w+2]
-            # # cv2.imwrite(os.path.join(op_path, f"cropped_image_{idx}.jpeg"),cropped_cell)
-            # idx += 1
-            # x_coordinates.append(x)
-            # y_coordinates.append(y)
-            # # image = cv2.circle(image, (x, y), radius=5, color=(0, 0, 255), thickness=5)
-            # print(f"Pixel values x_min: {x} y_min : {y} x_max: {x+w} y_max : {y+h}")
-
-    
 
 if __name__ == "__main__":
 
@@ -269,11 +248,24 @@ if __name__ == "__main__":
 
     fileHandler = FileHandler()
     xmlData = fileHandler.read_xml_file(arguments.xml)
-    student_xml_data = xmlData["nsbm"]["students"]["batches"]["batch_15"]["student"]
-
+    student_xml_data = [
+        dict(data) for data in list(xmlData["nsbm"]["students"]["batches"]["batch_15"]["student"])
+    ]
+    
     # Creating db instance
+    imageProcessUtil = ImageProcessUtil()
+    insert_records_to_db = True if not os.path.exists("student_attendance.db") else False
     attendanceDatabase = StudentAttendanceDatabase()
 
+    print(f"Loading the xml students details to database...")
+    if insert_records_to_db:
+        for student_record in student_xml_data:
+            attendanceDatabase.insert_into(
+                index_no=student_record["index"],
+                name=student_record["name"],
+                signature_img=None,
+                attendance_count=0
+            )
 
     current_working_dir = os.getcwd()
     output_dir_path = os.path.join(current_working_dir, "output")
@@ -298,19 +290,26 @@ if __name__ == "__main__":
         region_cooridnates, 
         output_dir_path
     )
-    print(f"Student details : \n {students_details}\n")
+    print(f"Student xml : \n {student_xml_data}\n")
 
     detected_students = {
         int(student["studentno"]): student["signature"] for student in students_details
-    } 
+    }
+    print(f" Detected students : \n{detected_students}")
     for student in student_xml_data:
         # student_record = dict(student)
         index = int(student["index"])
         if index in detected_students.keys():
-            print(f"Found {index} : {detected_students[index]}")
+            # print(f"Found {index} : {detected_students[index]}")
             x_min, y_min, x_max, y_max = detected_students[index]
-            cropped_signature = aligned_image[y_min:y_max, x_min:x_max]
-            # cv2.imwrite(
-            #     os.path.join(output_dir_path, f"{index}.jpeg"),
-            #     cropped_signature
-            # )
+            cropped_image = aligned_image[y_min:y_max, x_min:x_max]
+            if imageProcessUtil.is_signature_valid(
+                imageProcessUtil.get_black_and_white_image(cropped_image)
+            ):
+                attendance = attendanceDatabase.get_records("attendance_count", index).fetchone()
+                print(f"Attendence record:  {attendance[0]}")
+
+                # attendanceDatabase.update_record(index, "signature", detected_students[index])
+                attendanceDatabase.update_record(index, "attendance_count", attendance[0]+1)
+    attendanceDatabase.close_connection()
+    print("Completed running script...")

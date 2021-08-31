@@ -52,6 +52,9 @@ class StudentAttendanceDatabase:
             print("SQL ERROR : Cannot initate the database connection")
             raise ex
 
+    def close_connection(self):
+        self.connection.close()
+
     def get_all_records(self):
         return self._execute_query(
             f"select * from {self.table_name}"
@@ -62,13 +65,13 @@ class StudentAttendanceDatabase:
         return self._execute_query(query)
         
 
-    def insert_into(self, values):
+    def insert_into(self, index_no, name, signature_img, attendance_count):
         return self._execute_query(
-            f"insert into {self.table_name} (index_no, student_name, signature) values (?, ?, ?)",
-            values,
+            f"insert into {self.table_name} (index_no, student_name, signature, attendance_count) values (?, ?, ?, ?)",
+            (index_no, name, signature_img, attendance_count),
         )
 
-    def update_record(self, column, id, value):
+    def update_record(self, id, column, value):
         return self._execute_query(
             f"update {self.table_name} set {column}={value} where index_no = {id}",
         )
