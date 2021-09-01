@@ -5,12 +5,10 @@ import numpy as np
 
 from models import Student
 from utils import TesseractOcrParser, FileHandler, ImageProcessUtil
-from database import StudentAttendanceDatabase
+from services import StudentAttendanceService
 
 WARP_DIR_NAME = "warp_images"
-BINARY_DIR_NAME ="binary_images"
-# signing_sheets = "signing_sheets"
-signing_sheets = "signing_sheet_1"
+BINARY_DIR_NAME ="binary_image"
 COLUMN_IDENTIFIED_DIR_NAME = "column_identify"
 CROPPED_IMG_DIR_NAME = "cropped_img"
 
@@ -33,11 +31,6 @@ def drawHoughLines(image, lines, size, color):
             y1 = int(y0 + 1000*(a))
             x2 = int(x0 - 1000*(-b))
             y2 = int(y0 - 1000*(a))
-
-            # print(x1,y1,x2,y2,x0,y0)
-            cv2.line(image,(x1,y1),(x2,y2),color,3)
-            
-            print(f"theta value : {theta} rho : {rho}\n")
             (h, w) = image.shape[:2]
             center = (w // 2, h // 2)
             M = cv2.getRotationMatrix2D(center,np.degrees(theta)-90, 1.0)
@@ -172,7 +165,6 @@ def parse_student_details(image, contours, region_coordinates, op_path):
     ocrParser = TesseractOcrParser()
     expected_column_name = [
         STUDENT_NO,
-        # STUDENT_NAME,
         SIGNATURE,
     ]
     padding = 40
@@ -247,25 +239,12 @@ if __name__ == "__main__":
     assert os.path.isfile(arguments.xml) and os.path.basename(arguments.xml).split(".")[1] == "xml", "Image argument should be image file"
 
     fileHandler = FileHandler()
-    xmlData = fileHandler.read_xml_file(arguments.xml)
-    student_xml_data = [
-        dict(data) for data in list(xmlData["nsbm"]["students"]["batches"]["batch_15"]["student"])
-    ]
+    student_xml_data = fileHandler.parse_xml_file(arguments.xml)
     
-    # Creating db instance
     imageProcessUtil = ImageProcessUtil()
-    insert_records_to_db = True if not os.path.exists("student_attendance.db") else False
-    attendanceDatabase = StudentAttendanceDatabase()
 
-    print(f"Loading the xml students details to database...")
-    if insert_records_to_db:
-        for student_record in student_xml_data:
-            attendanceDatabase.insert_into(
-                index_no=student_record["index"],
-                name=student_record["name"],
-                signature_img=None,
-                attendance_count=0
-            )
+    print(f"Loading the students attendance service...")
+    attendanceService = StudentAttendanceService(student_xml_data)
 
     current_working_dir = os.getcwd()
     output_dir_path = os.path.join(current_working_dir, "output")
@@ -296,20 +275,18 @@ if __name__ == "__main__":
         int(student["studentno"]): student["signature"] for student in students_details
     }
     print(f" Detected students : \n{detected_students}")
-    for student in student_xml_data:
-        # student_record = dict(student)
-        index = int(student["index"])
-        if index in detected_students.keys():
-            # print(f"Found {index} : {detected_students[index]}")
-            x_min, y_min, x_max, y_max = detected_students[index]
-            cropped_image = aligned_image[y_min:y_max, x_min:x_max]
-            if imageProcessUtil.is_signature_valid(
-                imageProcessUtil.get_black_and_white_image(cropped_image)
-            ):
-                attendance = attendanceDatabase.get_records("attendance_count", index).fetchone()
-                print(f"Attendence record:  {attendance[0]}")
 
-                # attendanceDatabase.update_record(index, "signature", detected_students[index])
-                attendanceDatabase.update_record(index, "attendance_count", attendance[0]+1)
-    attendanceDatabase.close_connection()
+    for student in attendanceService.get_all_students():
+        if student.index in detected_students.keys():
+            x_min, y_min, x_max, y_max = detected_students[student.index]
+            cropped_image = aligned_image[y_min:y_max, x_min:x_max]
+            
+            # if imageProcessUtil.is_signature_valid(altered_signature):
+            attendanceService.update_student_attendance(
+                student, 
+                imageProcessUtil.is_signature_valid(cropped_image)
+            )
+            print(f"Attendence record of {student.name}:  {student.attendance}")
+
     print("Completed running script...")
+
