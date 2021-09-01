@@ -23,13 +23,12 @@ class FileHandler:
             print(f"{self.__class__.__name__}: ERROR: Failed reading xml file")
             raise ex
 
-    def read_image_file(self, file_path):
-        print(f"Reading image file {file_path}")
-        self.image = cv2.imread(
-            file_path,
-        )
+    def read_image_file_via_cv(self, file_path):
+        print(f"{self.__class__.__name__}: INFO: Reading image {file_path}")
+        return cv2.imread(file_path)
 
-    def write_image_file(self, dir_path, file_name):
+    def write_image_file_via_cv(self, dir_path, file_name):
+        print(f"{self.__class__.__name__}: INFO: Writing image to directory: {dir_path}")
         cv2.imwrite(
             os.path.join(dir_path, file_name),
             self.image,
@@ -52,39 +51,6 @@ class FileHandler:
 
 
 
-class TesseractOcrParser:
-
-    def __init__(self):
-        self.config = r"--oem 3 --psm 6"
-
-    def _preprocess_image(self, image):
-        gray_scale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        thresh, bwImage = cv2.threshold(gray_scale_image, 127, 255, cv2.THRESH_BINARY)
-        kernel = np.ones((3, 3), np.uint8)
-        return cv2.morphologyEx(bwImage, cv2.MORPH_CLOSE, kernel)
-
-    def _process_parsed_value(self, parsed_string):
-        return "".join([
-            ltr.lower() for ltr in parsed_string if ltr.isalnum()
-        ])
-
-    def get_string_from_image(self, image):
-        image = self._preprocess_image(image)
-        parsed_value = pytesseract.image_to_string(
-            image, config=self.config,
-        )
-        # print(f"BEFORE RETURN OCR parsed STR value : {parsed_value}")
-        return self._process_parsed_value(parsed_value)
-
-    def get_int_from_image(self, image):
-        image = self._preprocess_image(image)
-        parsed_value = pytesseract.image_to_string(
-            image, config=self.config,
-        )
-        # print(f"BEFORE RETURN OCR parsed INT value : {parsed_value}")
-        return int("".join([
-            ltr for ltr in parsed_value if ltr.isnumeric()
-        ]))
 
 
 class ImageProcessUtil:
@@ -92,7 +58,7 @@ class ImageProcessUtil:
     def __init__(self):
         pass
 
-    def _gray_scale_image(self, image):
+    def gray_scale_image(self, image):
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     def remove_noise_using_morphology(self, image, method=cv2.MORPH_CLOSE, kernel_size=(3,3)):
@@ -104,7 +70,7 @@ class ImageProcessUtil:
     def get_black_and_white_image(self, image):
         print(f"{self.__class__.__name__}: processing for B&W image\n")
         ret,bw_image = cv2.threshold(
-            self._gray_scale_image(image),
+            self.gray_scale_image(image),
             127,
             255,
             cv2.THRESH_BINARY
@@ -112,22 +78,20 @@ class ImageProcessUtil:
         return bw_image
 
     def histogram_values_for_pixels(self, image, pixels=[0,255]):
-        hist, bins = np.histogram(image.flatten(), 256, pixels)
+        noise_removed_image = self.remove_noise_using_morphology(image)
+        hist, bins = np.histogram(noise_removed_image.flatten(), 256, pixels)
         return [ hist[pixel_value] for pixel_value in pixels ]
 
 
-    def is_signature_valid(self, cropped_image):
-        bw_image = self.get_black_and_white_image(cropped_image)
-        values = self.histogram_values_for_pixels(
-            self.remove_noise_using_morphology(bw_image)
-        )
-        return values[0]/np.sum(values) > 0.02
+    def get_kernel_using_structuring_element(self, size, morph_shape=cv2.MORPH_RECT):
+        return cv2.cv2.getStructuringElement(morph_shape, size)
 
 
 class Visualization:
-    def __init__(self,attendence_data):
-        self.name = attendence_data[0]
-        self.attendence = ast.literal_eval(str(attendence_data[1]))
+
+    def __init__(self, attendence_data, student_name):
+        self.name = student_name
+        self.attendence = attendence_data
         self.plot_array = [self.attendence.count(1),self.attendence.count(0)]
         self.legend_labels = ['Present','Absent']
         self.xpos = np.arange(len((self.legend_labels)))

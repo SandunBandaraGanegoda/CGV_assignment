@@ -19,12 +19,12 @@ if __name__ == "__main__":
     attendanceDatabase = StudentAttendanceService()
 
     student_details = attendanceDatabase.get_student_record(arguments.index_no) 
-    
+    if student_details is None:
+        raise Exception(f"ERROR: No student found with index number {arguments.index_no}")
 
-    # Return np array [STUDENT_NAME, ATTENDANCE_COUNT]
-    print(f"DATA : { np.array(student_details.attendance)}")
     imageVisualize = Visualization(
-        np.array(student_details.attendance)
+        student_details.attendance,
+        student_details.name
     )
     imageVisualize.show_pie_plot()
 
