@@ -1,10 +1,8 @@
 import cv2
 import numpy as np
 import pytesseract
-import xmltodict
 
-from utils import ImageProcessUtil
-
+from lib import utils
 
 STUDENT_NO = "studentno"
 STUDENT_NAME = "studentname"
@@ -48,7 +46,8 @@ class TesseractOcrParser:
 
 class AttendanceImageProcessor:
 
-    def __init__(self, image, ):
+    def __init__(self, image: np.ndarray ):
+        self.padding = 40
         self.image = None
         self.image_table_contours = None
         self.original_image = image
@@ -59,7 +58,7 @@ class AttendanceImageProcessor:
 
         self.image_height, self.image_weight = image.shape[:2]
         self.image_center_coordinates = (self.image_weight //2, self.image_height//2) 
-        self.imageProcessUtil = ImageProcessUtil()
+        self.imageProcessUtil = utils.ImageProcessUtil()
         self.ocrParser = TesseractOcrParser()
 
         self._preprocess_image()
@@ -185,8 +184,7 @@ class AttendanceImageProcessor:
         
 
     def parse_student_details(self, contours, region_coordinates):
-
-        padding = 40
+        
         region_details = {}
         _, _, region_x_max, region_y_max = region_coordinates
         
@@ -198,46 +196,56 @@ class AttendanceImageProcessor:
                 if set(column).issubset(set(ocr_parsed_text.lower())):
                     print(f"Matched OCR : {ocr_parsed_text.lower()}")
                     region_details[column] = {
-                        COORDINATES : (x - padding, y + h - padding, x + w + padding, region_y_max + padding)
+                        COORDINATES : (x - self.padding, y + h - self.padding, x + w + self.padding, region_y_max + self.padding)
                     }
                     if column == STUDENT_NO:
                         print(f"Setting studentno has start coordinates: {(x, y + h , w, h)}")
+                        self.student_no_column_area = w*h
+                        print(f"{self.__class__.__name__} Student No Area :{self.student_no_column_area}\n")
                         start_x, start_y, _, start_h = x, y, w, h
+                    if column == SIGNATURE:
+                        self.signature_column_area = w*h
+                        print(f"{self.__class__.__name__} Signature Area :{self.signature_column_area}\n")
                     if len(region_details.keys()) == 2: break
         record_by_row = []
         # After removing the header column from contour table
         print("Detecting student record region")
         student_record_contours = self.get_contours_under_region(
-            (start_x-padding, (start_y+start_h)-padding, region_x_max+padding, region_y_max+padding),
+            (start_x-self.padding, (start_y+start_h)-self.padding, region_x_max+self.padding, region_y_max+self.padding),
             contours
         )
         start_x, start_y = start_x, (start_y+start_h) 
         print("Detecting student no and signature region in the table ..")
         while len(student_record_contours) > 2:
             record_contours = self.get_contours_under_region(
-                (start_x-padding, start_y-padding , region_x_max+padding, start_y+start_h+padding),
+                (start_x-self.padding, start_y-self.padding , region_x_max+self.padding, start_y+start_h+self.padding),
                 contours
             )
             details = {}
             for record in record_contours:
+
                 x, y, w, h = cv2.boundingRect(record)
-                if self._is_inside_region((x, y, x+w, y+h), (region_details[STUDENT_NO][COORDINATES])):
+                if self._is_inside_region((x, y, x+w, y+h), (region_details[STUDENT_NO][COORDINATES])) and self.student_no_column_area <= (w*h):
                     details[STUDENT_NO] = self.ocrParser.get_int_from_image(
                         self.image[y: y+h, x: x+w]
                     )
                     start_x, start_y = x, y+h
-                if self._is_inside_region((x, y, x+w, y+h), (region_details[SIGNATURE][COORDINATES])):
-                    # TODO: Validate signature self.image with the size with average size
-                    details[SIGNATURE] = [x, y, x+w, y+h]
+                elif self._is_inside_region((x, y, x+w, y+h), (region_details[SIGNATURE][COORDINATES])):
+                    if self.signature_column_area < (w*h) or (SIGNATURE not in details.keys()):
+                        details[SIGNATURE] = [x, y, x+w, y+h]
+                    elif (SIGNATURE in details.keys()):
+                        sig_w, sig_h = (details[SIGNATURE][2]-details[SIGNATURE][0], details[SIGNATURE][3]-details[SIGNATURE][1])
+                        if (sig_w*sig_h) < (w*h):
+                            details[SIGNATURE] = [x, y, x+w, y+h]
             record_by_row.append(details)
             student_record_contours = self.get_contours_under_region(
-                (start_x-padding, start_y-padding, region_x_max+padding, region_y_max+padding),
+                (start_x-self.padding, start_y-self.padding, region_x_max+self.padding, region_y_max+self.padding),
                 contours
             )
         return record_by_row
 
-    def is_signature_valid(self, cropped_image):
+    def is_attendance_signed(self, cropped_image):
         values = self.imageProcessUtil.histogram_values_for_pixels(
-            self.imageProcessUtil.get_black_and_white_image(cropped_image)
+            self.imageProcessUtil.get_black_and_white_image(cropped_image),
         )
         return values[0]/np.sum(values) > 0.02

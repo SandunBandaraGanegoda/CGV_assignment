@@ -1,8 +1,8 @@
-import os
 import json
+import numpy
 import sqlite3
 
-from models import Student
+from lib import utils, models
 
 
 
@@ -44,7 +44,7 @@ class AttendanceDatabase:
             self.close_connection()
             raise ex
 
-    def execute_query(self, sql_query, parameters=None):
+    def execute_query(self, sql_query, parameters=None) -> sqlite3.Cursor:
         try:
             if parameters:
                 rslt = self.cursor.execute(sql_query, parameters)
@@ -65,6 +65,7 @@ class StudentAttendanceService:
     def __init__(self, xml_students_data=None):
         print(f"{self.__class__.__name__}: INFO: Initating attendance services")
         self.database = AttendanceDatabase()
+        self.imageUtils = utils.ImageProcessUtil()
         if xml_students_data:
             self._validate_students_records(xml_students_data)
 
@@ -79,7 +80,7 @@ class StudentAttendanceService:
                 print(f"{self.__class__.__name__}: INFO: Inserting student record {student.index}")
                 self.create_student_record(student)
 
-    def create_student_record(self, student: Student):
+    def create_student_record(self, student: models.Student):
         created = self.database.execute_query(
                 f"""
                 INSERT INTO {self.database.attendance_table} VALUES (?, ?, ?, ?)
@@ -93,10 +94,10 @@ class StudentAttendanceService:
             f"select * from {self.database.attendance_table}"
         ).fetchall()
         if data_list:
-            return [ Student(*data) for data in data_list]
+            return [ models.Student(*data) for data in data_list]
         return []
 
-    def get_student_record(self, id) -> Student:
+    def get_student_record(self, id) -> models.Student:
         fetched_data = self.database.execute_query(
             f"""
             SELECT * FROM {self.database.attendance_table} 
@@ -104,10 +105,10 @@ class StudentAttendanceService:
             """
         ).fetchone()
         if fetched_data:
-            return Student(*fetched_data)
+            return models.Student(*fetched_data)
         return None
 
-    def update_student(self, student:Student) -> Student:
+    def update_student(self, student:models.Student) -> models.Student:
         updated = self.database.execute_query(
             f"""
             UPDATE {self.database.attendance_table} SET
@@ -117,10 +118,10 @@ class StudentAttendanceService:
             """
         )
         if updated:
-            return Student(*updated)
+            return models.Student(*updated)
         return None
 
-    def update_student_attendance(self, student:Student, present: bool) -> Student:
+    def update_student_attendance(self, student:models.Student, present: bool) -> models.Student:
         attendance = student.attendance[:] 
         value = 1 if present else 0
         attendance.append(value)
@@ -134,10 +135,26 @@ class StudentAttendanceService:
         if updated.rowcount:
             student.attendance = attendance
             return student
-            # return Student(*updated)
         return None
 
-    def remove_student(self, student:Student) -> int:
+    def update_signature_if_none(self, student:models.Student, signature_image: numpy.ndarray) -> models.Student:
+        if not student.signature.size:
+            encoded_image = self.imageUtils.encode_image(signature_image)
+            updated = self.database.execute_query(
+                f"""
+                UPDATE {self.database.attendance_table} SET 
+                    signature=(?)
+                WHERE index_no=(?)
+                """,
+                (encoded_image, student.index),
+            )
+            print(f"updated row count : {updated.rowcount}")
+            if updated.rowcount:
+                student.signature = signature_image
+                return student
+        return student
+
+    def remove_student(self, student:models.Student) -> int:
         return self.database.execute_query(
             f"""
             DELETE FROM {self.database.attendance_table} 

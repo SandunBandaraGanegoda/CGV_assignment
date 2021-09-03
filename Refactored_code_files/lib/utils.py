@@ -1,12 +1,8 @@
-import os
 import cv2
-import pytesseract
 import xmltodict
-import ast
-
 import numpy as np
 
-from models import Student
+from lib import models
 from matplotlib import pyplot as plt
 
 class FileHandler:
@@ -27,11 +23,11 @@ class FileHandler:
         print(f"{self.__class__.__name__}: INFO: Reading image {file_path}")
         return cv2.imread(file_path)
 
-    def write_image_file_via_cv(self, dir_path, file_name):
-        print(f"{self.__class__.__name__}: INFO: Writing image to directory: {dir_path}")
+    def write_image_file_via_cv(self,image, file_path):
+        print(f"{self.__class__.__name__}: INFO: Writing image to directory: {file_path}")
         cv2.imwrite(
-            os.path.join(dir_path, file_name),
-            self.image,
+            file_path,
+            image,
         )
 
     def parse_xml_file(self, path) -> list:
@@ -40,7 +36,7 @@ class FileHandler:
         parsed_data = xmltodict.parse(data)
         for data in list(parsed_data["nsbm"]["students"]["batches"]["batch_15"]["student"]):
             student_list.append(
-                Student(
+                models.Student(
                     data['index'],
                     data['name'],
                     bytes(),
@@ -50,13 +46,26 @@ class FileHandler:
         return student_list if student_list else None
 
 
-
-
-
 class ImageProcessUtil:
 
     def __init__(self):
         pass
+
+    def empty_array(self):
+        return np.array([])
+
+    def encode_image(self, image):
+        if isinstance(image, np.ndarray) and len(image) != 0:
+            return np.array(cv2.imencode('.jpg', image)[1]).tobytes()
+        return bytes()
+
+    def decode_image(self, image_bytes: bytes):
+        if isinstance(image_bytes, bytes) and len(image_bytes) != 0:
+            return  cv2.imdecode(
+                np.asarray(bytearray(image_bytes ), dtype="uint8"),
+                cv2.IMREAD_COLOR
+            )
+        return self.empty_array()
 
     def gray_scale_image(self, image):
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
