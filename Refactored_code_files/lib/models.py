@@ -1,12 +1,17 @@
 import json
 
+from lib import utils
+
+
 class Student:
 
     def __init__(self, index_number: int, student_name: str, student_signature: bytes, attendance):
+        self._imageUtils = utils.ImageProcessUtil()
         self.name = student_name
         self._index = int(index_number) if not isinstance(index_number, int) else index_number
-        self.signature =  student_signature
+        self._signature = self._imageUtils.decode_image(student_signature)
         self._attendance = json.loads(attendance) if isinstance(attendance, str) else attendance
+
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}: {self.index}"
@@ -27,10 +32,20 @@ class Student:
     def attendance(self, attendance):
         self._attendance = json.loads(attendance) if not isinstance(attendance, list) else attendance
 
+    @property
+    def signature(self):
+        return self._signature
+
+    @signature.setter
+    def signature(self, signature_image):
+        self._signature = self._imageUtils.decode_image(
+            signature_image,
+        )
+
     def to_db_format(self) -> tuple:
         return (
             self.index,
             self.name,
-            self.signature,
+            self._imageUtils.encode_image(self._signature),
             json.dumps(self.attendance),
         )

@@ -2,12 +2,10 @@
 Visualize script to summary the attendance of student 
 by using the provided student index number.
 """
-import os
 import argparse
-import numpy as np
 
-from services import StudentAttendanceService
-from utils import Visualization
+from lib.services import StudentAttendanceService
+from lib.utils import Visualization
 
 
 if __name__ == "__main__":
