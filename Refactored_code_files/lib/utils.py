@@ -71,7 +71,7 @@ class ImageProcessUtil:
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     def remove_noise_using_morphology(self, image, method=cv2.MORPH_CLOSE, kernel_size=(3,3)):
-        print(f"{self.__class__.__name__}: removing noise using {method}\n")
+        print(f"{self.__class__.__name__}: removing noise using Morph \n")
         kernel = np.ones(kernel_size, np.uint8)
         return cv2.morphologyEx(image, method, kernel)
 
@@ -98,26 +98,76 @@ class ImageProcessUtil:
 
 class Visualization:
 
-    def __init__(self, attendence_data, student_name):
-        self.name = student_name
-        self.attendence = attendence_data
-        self.plot_array = [self.attendence.count(1),self.attendence.count(0)]
-        self.legend_labels = ['Present','Absent']
-        self.xpos = np.arange(len((self.legend_labels)))
-        self.colors = ['tab:blue', 'tab:orange']
+    def __init__(self, student: models.Student, attendance_details):
+        self.student = student
+        self.students_attendance_details = attendance_details
+        self.figure = plt.figure()
+        self.figure.suptitle(
+            f'Details of student attendance : {self.student.index}\n {self.student.name}',
+            fontsize=14, 
+            fontweight='bold',
+            color="#76726F"
+        )
+
+    def _calculate_total_attendace(self):
+        attendance_list = self.students_attendance_details
+        for att in attendance_list:
+            if len(att) < len(self.student.attendance):
+                for x in range(len(self.student.attendance) - len(att)):
+                    att.append(0)
+            if len(att) > len(self.student.attendance):
+                for x in range(len(att) - len(self.student.attendance)):
+                    self.student.attendance.append(0)
+        attendance_list.append(self.student.attendance)
+
+        np_array = np.array(attendance_list)
+        return np.sum(np_array, axis=0)
+
+    def generate_pie_plot(self):
+        pie_plot = self.figure.add_subplot(2, 2, 4)
+        pie_plot.set_title("Overall Student attendance", color="#0066CC" )
+        pie_plot.pie(
+            [self.student.attendance.count(1), self.student.attendance.count(0)],
+            labels=['Present','Absent'],
+            colors=['tab:blue', 'tab:orange'],
+            autopct='%.0f%%',
+            radius=1,
+        )
+
+    def generate_line_plot(self):
+        line_plot = self.figure.add_subplot(2, 2, 2)
+        line_plot.set_title("Attendance by days", color="#0066CC")
+        line_plot.plot(
+            [x for x in range(1, len(self.student.attendance)+1)],
+            self.student.attendance, 
+            linewidth = 3,
+            marker='o',
+            markerfacecolor='orange',
+            markersize=12,
+        )
+        line_plot.set_xlabel("Attendance counted days")
+        line_plot.set_yticklabels(["Absent", "Present"], color = "#25517D" )
+        line_plot.set_yticks([0, 1])
+        line_plot.set_xlim(0, len(self.student.attendance)+1, 1)
+        line_plot.set_ylim(-1, 2, 1)
+
+    def generate_bar_plot(self):
+        bar_plot = self.figure.add_subplot(1, 2, 1)
+        bar_plot.set_title("Total attendance for the lecture", color="#0066CC")
+        attendance_for_class = self._calculate_total_attendace()
+        bar_plot.set_xlabel("Lecture days")
+        bar_plot.set_ylabel("Total attendance count")
+        bar_plot.bar(
+            [x for x in range(1, len(self.student.attendance) +1)], 
+            attendance_for_class,
+            width=0.3,
+        )
 
 
-    def show_pie_plot(self):
-        fig, ax = plt.subplots()
-        ax.pie(self.plot_array, labels = self.legend_labels, colors = self.colors , autopct='%.0f%%')
-        ax.set_title(self.name)
+    def show_graph(self):
+        self.generate_line_plot()
+        self.generate_pie_plot()
+        self.generate_bar_plot()
+        plt.tight_layout()
         plt.show()
-
-    def show_bar_plot(self):
-        plt.bar(self.xpos,self.plot_array,color = self.colors)
-
-        plt.xticks(self.xpos,self.legend_labels)
-        plt.ylabel("Count")
-        plt.title('Student Monitoring')
-        plt.legend()
-        plt.show()
+    
