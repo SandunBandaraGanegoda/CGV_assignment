@@ -14,17 +14,16 @@ if __name__ == "__main__":
     argument_parser.add_argument("index_no", type=int, help="Index number of student")
     arguments = argument_parser.parse_args()
 
-    attendanceDatabase = StudentAttendanceService()
+    attendanceService = StudentAttendanceService()
 
-    student_details = attendanceDatabase.get_student_record(arguments.index_no) 
-    if student_details is None:
+    student = attendanceService.get_student_record(arguments.index_no) 
+    all_students_details = attendanceService.get_all_students()
+    if student is None:
         raise Exception(f"ERROR: No student found with index number {arguments.index_no}")
 
     imageVisualize = Visualization(
-        student_details.attendance,
-        student_details.name
+        student,
+        [stud.attendance for stud in all_students_details if stud.index != student.index],
     )
-    imageVisualize.show_pie_plot()
 
-    # TODO:  visulization 
-    # Create Line graph which is better
+    imageVisualize.show_graph()
