@@ -21,6 +21,8 @@ if __name__ == "__main__":
 
     attendanceService = services.StudentAttendanceService()
 
+    student = attendanceService.get_student_record(arguments.index)
+
     signatures_of_student = attendanceService.all_signatures_for_student(
         arguments.index
     )
@@ -28,15 +30,17 @@ if __name__ == "__main__":
     signature_list  = [ sig.signature for sig in signatures_of_student ]
     print(f"LENGHT of student signatures : {len(signature_list)}")
     signature_validator = core.SignaturesValidator()
-    classified_signatures = signature_validator.validate_signatures(
+    similar_signatures, not_similar_signatures = signature_validator.validate_signatures(
         signature_list
     )
     
-    similar = classified_signatures["alike"]
-    not_similar = classified_signatures["not_alike"]
-    print(f"Signatures from lectures days {similar} are highly similar")
-    print(f"Signature from {not_similar} are different")
 
+    print("--------"*6)
+    print(f"Signature verification for student\nIndex: {student.index}\nName:{student.name}")
+    print("--------"*6)
+    print(f"Lectures day with highly similar signatures : {similar_signatures}\n")
+    print(f"Different signature detect days {not_similar_signatures}")
+    print("--------"*6)
 
 
 
