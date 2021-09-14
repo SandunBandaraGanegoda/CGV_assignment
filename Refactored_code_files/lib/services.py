@@ -12,10 +12,11 @@ class AttendanceDatabase:
         print(f"{self.__class__.__name__} : Initating the database connections")
         self.connection = None
         self.database_file_name = "student_attendance.db"
-        self.attendance_table = "student_attendance" 
+        self.attendance_table = "student_attendance"
+        self.signature_table = "student_signature"
         self.connection  = self._get_connnection()
         self.cursor = self.connection.cursor()
-        self._create_table(self.attendance_table)
+        self._create_table()
     
     def _get_connnection(self):
         try:
@@ -26,15 +27,25 @@ class AttendanceDatabase:
             print(f"{self.__class__.__name__}: ERROR: Cannot initate the database connection")
             raise ex
 
-    def _create_table(self, table_name):
+    def _create_table(self):
         try:
             rslt = self.cursor.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {table_name} (
+                CREATE TABLE IF NOT EXISTS {self.attendance_table} (
                     index_no INT PRIMARY KEY,
                     student_name TEXT NOT NULL,
                     signature BLOB ,
                     attendance_count JSON
+                )
+                """
+            )
+            rslt = self.cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {self.signature_table} (
+                    lecture_day INT,
+                    index_no INT,
+                    signature BLOB,
+                    PRIMARY KEY (lecture_day, index_no)
                 )
                 """
             )
@@ -68,6 +79,9 @@ class StudentAttendanceService:
         self.imageUtils = utils.ImageProcessUtil()
         if xml_students_data:
             self._validate_students_records(xml_students_data)
+        last_lecture = self.last_signature_updated_lecture()
+        self.lecture_day = 1 if (last_lecture == '' or last_lecture == None) else last_lecture + 1
+
 
     def _validate_students_records(self, student_details):
         data = self.get_all_students()
@@ -87,7 +101,7 @@ class StudentAttendanceService:
                 """,
                 student.to_db_format(),
         )
-        return created.rowcount if created else None 
+        return created.rowcount if created else None
 
     def get_all_students(self) -> list:
         data_list = self.database.execute_query(
@@ -161,3 +175,36 @@ class StudentAttendanceService:
             WHERE index_no={student.index}
             """
         ).rowcount
+
+
+    def last_signature_updated_lecture(self):
+        executed = self.database.execute_query(
+            f"""
+            SELECT MAX(lecture_day) FROM {self.database.signature_table}
+            """
+        ).fetchone()
+        if executed:
+            return executed[0]
+        return None
+
+    def create_signature_record(self, student_index, signature_image):
+        encoded_image = self.imageUtils.encode_image(signature_image)
+        created = self.database.execute_query(
+                f"""
+                INSERT INTO {self.database.signature_table} (lecture_day, index_no, signature) 
+                VALUES (?, ?, ?)
+                """,
+                (self.lecture_day, student_index, encoded_image),
+        )
+        return created.rowcount if created else None
+
+    def all_signatures_for_student(self, student_index):
+        fetched_data = self.database.execute_query(
+            f"""
+            SELECT * FROM {self.database.signature_table} 
+            WHERE index_no = {student_index}
+            """
+        ).fetchall()
+        if fetched_data:
+            return [ models.SignatureRecord(*data) for data in fetched_data]
+        return []
