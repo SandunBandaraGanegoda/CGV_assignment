@@ -55,6 +55,7 @@ class ImageProcessUtil:
         return np.array([])
 
     def encode_image(self, image):
+        print(f"{self.__class__.__name__}: INFO: Encoding the image")
         if isinstance(image, np.ndarray) and len(image) != 0:
             return np.array(cv2.imencode('.jpg', image)[1]).tobytes()
         return bytes()
@@ -68,16 +69,17 @@ class ImageProcessUtil:
         return self.empty_array()
 
     def gray_scale_image(self, image):
+        print(f"{self.__class__.__name__}: INFO: Converting image to gray scale")
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     def remove_noise_using_morphology(self, image, method=cv2.MORPH_CLOSE, kernel_size=(3,3)):
-        print(f"{self.__class__.__name__}: removing noise using Morph \n")
+        print(f"{self.__class__.__name__}: removing noise using Morphology \n")
         kernel = np.ones(kernel_size, np.uint8)
         return cv2.morphologyEx(image, method, kernel)
 
 
     def get_black_and_white_image(self, image):
-        print(f"{self.__class__.__name__}: processing for B&W image\n")
+        print(f"{self.__class__.__name__}: INFO : Converting the image to binary image\n")
         ret,bw_image = cv2.threshold(
             self.gray_scale_image(image),
             127,
@@ -87,6 +89,7 @@ class ImageProcessUtil:
         return bw_image
 
     def histogram_values_for_pixels(self, image, pixels=[0,255]):
+        print(f"{self.__class__.__name__}: INFO: Generating the histogram for image pixels")
         noise_removed_image = self.remove_noise_using_morphology(image)
         hist, bins = np.histogram(noise_removed_image.flatten(), 256, pixels)
         return [ hist[pixel_value] for pixel_value in pixels ]
@@ -99,6 +102,7 @@ class ImageProcessUtil:
 class Visualization:
 
     def __init__(self, student: models.Student, attendance_details):
+        print(f"{self.__class__.__name__}: INFO: Initializing the visualization component")
         self.student = student
         self.students_attendance_details = attendance_details
         self.figure = plt.figure()
@@ -124,6 +128,7 @@ class Visualization:
         return np.sum(np_array, axis=0)
 
     def generate_pie_plot(self):
+        print(f"{self.__class__.__name__}: INFO: Generating the PIE chart for details")
         pie_plot = self.figure.add_subplot(2, 2, 4)
         pie_plot.set_title("Overall Student attendance", color="#0066CC" )
         pie_plot.pie(
@@ -135,6 +140,7 @@ class Visualization:
         )
 
     def generate_line_plot(self):
+        print(f"{self.__class__.__name__}: INFO: Generating the Line chart for details")
         line_plot = self.figure.add_subplot(2, 2, 2)
         line_plot.set_title("Attendance by days", color="#0066CC")
         line_plot.plot(
@@ -152,6 +158,7 @@ class Visualization:
         line_plot.set_ylim(-1, 2, 1)
 
     def generate_bar_plot(self):
+        print(f"{self.__class__.__name__}: INFO: Generating the bar chart for details")
         bar_plot = self.figure.add_subplot(1, 2, 1)
         bar_plot.set_title("Total attendance for the lecture", color="#0066CC")
         attendance_for_class = self._calculate_total_attendace()

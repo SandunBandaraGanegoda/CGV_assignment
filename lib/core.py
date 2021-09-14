@@ -19,6 +19,7 @@ COORDINATES = "coordinates"
 class TesseractOcrParser:
 
     def __init__(self):
+        print(f"{self.__class__.__name__}: INFO: Initailizing the Tesseract parser")
         self.config = r"--oem 3 --psm 6"
 
     def _preprocess_image(self, image):
@@ -70,6 +71,7 @@ class AttendanceImageProcessor:
 
         self._preprocess_image()
         self._detect_tables_lines()
+        print(f"{self.__class__.__name__ }: INFO: Initailized AttendaneImageProcessor")
 
 
     def _preprocess_image(self):
@@ -125,7 +127,7 @@ class AttendanceImageProcessor:
         return False
 
     def _detect_tables_lines(self):
-        print(f"{self.__class__.__name__}: INFO:Detecting the student table in the image")
+        print(f"{self.__class__.__name__}: INFO: Detecting the student table in the image")
         threshold_value = cv2.threshold(
             self.imageProcessUtil.get_black_and_white_image(self.image),
             100,
@@ -201,28 +203,25 @@ class AttendanceImageProcessor:
                 cropped_cell = self.image[y+2: y+h-2, x+2: x+w-2]
                 ocr_parsed_text = self.ocrParser.get_string_from_image(cropped_cell)
                 if set(column).issubset(set(ocr_parsed_text.lower())):
-                    print(f"Matched OCR : {ocr_parsed_text.lower()}")
+                    print(f"{self.__class__.__name__ }: INFO: Matched column name using OCR - {ocr_parsed_text.lower()}")
                     region_details[column] = {
                         COORDINATES : (x - self.padding, y + h - self.padding, x + w + self.padding, region_y_max + self.padding)
                     }
                     if column == STUDENT_NO:
-                        print(f"Setting studentno has start coordinates: {(x, y + h , w, h)}")
                         self.student_no_column_area = w*h
-                        print(f"{self.__class__.__name__} Student No Area :{self.student_no_column_area}\n")
                         start_x, start_y, _, start_h = x, y, w, h
                     if column == SIGNATURE:
                         self.signature_column_area = w*h
-                        print(f"{self.__class__.__name__} Signature Area :{self.signature_column_area}\n")
                     if len(region_details.keys()) == 2: break
         record_by_row = []
         # After removing the header column from contour table
-        print("Detecting student record region")
+        print(f"{self.__class__.__name__ }: INFO: Detecting student record region")
         student_record_contours = self.get_contours_under_region(
             (start_x-self.padding, (start_y+start_h)-self.padding, region_x_max+self.padding, region_y_max+self.padding),
             contours
         )
         start_x, start_y = start_x, (start_y+start_h) 
-        print("Detecting student no and signature region in the table ..")
+        print(f"{self.__class__.__name__ }: INFO: Detecting student no and signature region in the table ..")
         while len(student_record_contours) > 2:
             record_contours = self.get_contours_under_region(
                 (start_x-self.padding, start_y-self.padding , region_x_max+self.padding, start_y+start_h+self.padding),
@@ -252,6 +251,7 @@ class AttendanceImageProcessor:
         return record_by_row
 
     def is_attendance_signed(self, cropped_image):
+        print(f"{self.__class__.__name__ }: INFO: Validating whether student has signed the sheet")
         values = self.imageProcessUtil.histogram_values_for_pixels(
             self.imageProcessUtil.get_black_and_white_image(cropped_image),
         )
@@ -265,6 +265,7 @@ class SignatureFeatureExtractor:
 
     def _rgb_to_gray(self, img):
         # Converts rgb to grayscale
+        print(f"{self.__class__.__name__}: INFO: Converting the RGB to Gray scale image")
         greyimg = np.zeros((img.shape[0], img.shape[1]))
         for row in range(len(img)):
             for col in range(len(img[row])):
@@ -272,6 +273,7 @@ class SignatureFeatureExtractor:
         return greyimg
 
     def _gray_to_binary(self, img):
+        print(f"{self.__class__.__name__}: INFO: Converting the gray scale to binary image")
         # Converts grayscale to binary
         blur_radius = 0.8
         img = ndimage.gaussian_filter(img, blur_radius)
@@ -312,10 +314,12 @@ class SignatureFeatureExtractor:
         )
 
     def _get_eccentricity_solidity(self, image):
+        print(f"{self.__class__.__name__ }: INFO: Calculating the eccentricity and solidity features")
         properties = regionprops(image.astype("int8"))
         return properties[0].eccentricity, properties[0].solidity
 
     def _get_skew_kurtosis(self, image):
+        print(f"{self.__class__.__name__ }: INFO: Calculating the skewness and kurtosis features")
         image_heigth, image_width = image.shape
         x = range(image_width)
         y = range(image_heigth)
@@ -346,6 +350,7 @@ class SignatureFeatureExtractor:
         return (skewx , skewy), (kurtx, kurty)
 
     def generate_feature_for_image(self, image):
+        print(f"{self.__class__.__name__ }: INFO: Calcaluting features from signatures image")
         _preprocessed_image = self._preprocess_image(image)
         ratio, centroid = self._get_ratio_and_centroid_feature(_preprocessed_image)
         eccentricity, solidity = self._get_eccentricity_solidity(_preprocessed_image)
@@ -381,18 +386,20 @@ class SignaturesValidator:
         return images_features_list
 
     def validate_signatures(self, image_list):
+        print(f"{self.__class__.__name__ }: INFO: Validating the signatures from the student")
         features_list = self._retrieve_features_for_image_list(
             image_list
         )
         clustered_signatures = self.k_means_cluster.fit_predict(
             features_list
         )
-        similar_signatures = {"alike": [], "not_alike": []}
+        similar_signatures = []
+        different_signatures = []
         indx = 0
         for cluster in clustered_signatures:
             if cluster == 0:
-                similar_signatures["alike"].append(indx)
+                similar_signatures.append(indx)
             else:
-                similar_signatures["not_alike"].append(indx)
+                different_signatures.append(indx)
             indx += 1
-        return similar_signatures
+        return similar_signatures, different_signatures

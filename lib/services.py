@@ -162,7 +162,6 @@ class StudentAttendanceService:
                 """,
                 (encoded_image, student.index),
             )
-            print(f"updated row count : {updated.rowcount}")
             if updated.rowcount:
                 student.signature = signature_image
                 return student

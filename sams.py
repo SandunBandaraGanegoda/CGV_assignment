@@ -27,15 +27,15 @@ if __name__ == "__main__":
         fileHandler.read_image_file_via_cv(arguments.image)
     )
 
-    image_basename = os.path.basename(arguments.image).split(".")[0]
-    current_path = os.getcwd()
-    op_path = os.path.join(current_path, "outputs")
-    if not os.path.exists(op_path):
-        os.mkdir(op_path)
+    # image_basename = os.path.basename(arguments.image).split(".")[0]
+    # current_path = os.getcwd()
+    # op_path = os.path.join(current_path, "outputs")
+    # if not os.path.exists(op_path):
+    #     os.mkdir(op_path)
     
-    op_img_dir = os.path.join(op_path, image_basename)
-    if not os.path.exists(op_img_dir):
-        os.mkdir(op_img_dir)
+    # op_img_dir = os.path.join(op_path, image_basename)
+    # if not os.path.exists(op_img_dir):
+    #     os.mkdir(op_img_dir)
 
     region_cooridnates, student_region_contours = attendanceImageProcessor.get_student_region()
 
@@ -51,10 +51,10 @@ if __name__ == "__main__":
         if student.index in detected_students.keys():
             x_min, y_min, x_max, y_max = detected_students[student.index]
             cropped_image = attendanceImageProcessor.image[y_min:y_max, x_min:x_max]
-            fileHandler.write_image_file_via_cv(
-                cropped_image,
-                os.path.join(op_img_dir, f"{student.index}.jpg")
-            )
+            # fileHandler.write_image_file_via_cv(
+            #     cropped_image,
+            #     os.path.join(op_img_dir, f"{student.index}.jpg")
+            # )
             attendance_status = attendanceImageProcessor.is_attendance_signed(cropped_image,)
             attendanceService.update_student_attendance(
                 student, 
