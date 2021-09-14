@@ -2,6 +2,13 @@ import cv2
 import numpy as np
 import pytesseract
 
+from scipy import ndimage
+from skimage import io
+from skimage.filters import threshold_otsu 
+from skimage.measure import regionprops
+from sklearn.cluster import KMeans
+
+
 from lib import utils
 
 STUDENT_NO = "studentno"
@@ -249,3 +256,143 @@ class AttendanceImageProcessor:
             self.imageProcessUtil.get_black_and_white_image(cropped_image),
         )
         return values[0]/np.sum(values) > 0.02
+
+
+class SignatureFeatureExtractor:
+
+    def __init__(self):
+        pass
+
+    def _rgb_to_gray(self, img):
+        # Converts rgb to grayscale
+        greyimg = np.zeros((img.shape[0], img.shape[1]))
+        for row in range(len(img)):
+            for col in range(len(img[row])):
+                greyimg[row][col] = np.average(img[row][col])
+        return greyimg
+
+    def _gray_to_binary(self, img):
+        # Converts grayscale to binary
+        blur_radius = 0.8
+        img = ndimage.gaussian_filter(img, blur_radius)
+        thres = threshold_otsu(img)
+        binimg = img > thres
+        binimg = np.logical_not(binimg)
+        return binimg
+
+    def _preprocess_image(self, image):
+        # gray_scale_image = utils.ImageProcessUtil.gray_scale_image(image)
+        binary_image = self._gray_to_binary(
+            self._rgb_to_gray(image),
+        )
+        r, c = np.where(binary_image==1)
+        return binary_image[r.min(): r.max(), c.min(): c.max()]
+
+
+    def _get_ratio_and_centroid_feature(self, image):
+        print(f"{self.__class__.__name__}: INFO: Calculating the ratio and centroid features")
+        count = 0
+        numOfWhites = 0
+        a = np.array([0,0])
+        for row in range(len(image)):
+            for col in range(len(image[0])):
+                if image[row][col] == True:
+                    count += 1
+                    b = np.array([row,col])
+                    a = np.add(a,b)
+                    numOfWhites += 1
+        rowcols = np.array([image.shape[0], image.shape[1]])
+        centroid = a/numOfWhites
+        centroid = centroid/rowcols
+        ratio = count / (image.shape[0] * image.shape[1])
+        
+        return (
+            ratio, 
+            (centroid[0], centroid[1]),
+        )
+
+    def _get_eccentricity_solidity(self, image):
+        properties = regionprops(image.astype("int8"))
+        return properties[0].eccentricity, properties[0].solidity
+
+    def _get_skew_kurtosis(self, image):
+        image_heigth, image_width = image.shape
+        x = range(image_width)
+        y = range(image_heigth)
+        #calculate projections along the x and y axes
+        xp = np.sum(image, axis=0)
+        yp = np.sum(image, axis=1)
+        #centroid
+        cx = np.sum(x*xp)/np.sum(xp)
+        cy = np.sum(y*yp)/np.sum(yp)
+        #standard deviation
+        x2 = (x-cx)**2
+        y2 = (y-cy)**2
+        sx = np.sqrt(np.sum(x2*xp)/np.sum(image))
+        sy = np.sqrt(np.sum(y2*yp)/np.sum(image))
+        
+        #skewness
+        x3 = (x-cx)**3
+        y3 = (y-cy)**3
+        skewx = np.sum(xp*x3)/(np.sum(image) * sx**3)
+        skewy = np.sum(yp*y3)/(np.sum(image) * sy**3)
+
+        #Kurtosis
+        x4 = (x-cx)**4
+        y4 = (y-cy)**4
+        kurtx = np.sum(xp*x4)/(np.sum(image) * sx**4) - 3
+        kurty = np.sum(yp*y4)/(np.sum(image) * sy**4) - 3
+
+        return (skewx , skewy), (kurtx, kurty)
+
+    def generate_feature_for_image(self, image):
+        _preprocessed_image = self._preprocess_image(image)
+        ratio, centroid = self._get_ratio_and_centroid_feature(_preprocessed_image)
+        eccentricity, solidity = self._get_eccentricity_solidity(_preprocessed_image)
+        skewness, kurtosis = self._get_skew_kurtosis(_preprocessed_image)
+        return [
+            ratio, centroid[0], centroid[1], 
+            eccentricity,
+            solidity, 
+            skewness[0], skewness[1],
+            kurtosis[0], kurtosis[1],
+        ]
+
+
+class SignaturesValidator:
+
+    def __init__(self):
+        self.feature_extractor = SignatureFeatureExtractor()
+        self.k_means_cluster = KMeans(
+            n_clusters=2,
+            init='random',
+            n_init=10,
+            max_iter=100,
+        )
+
+    def _retrieve_features_for_image_list(self, image_list):
+        images_features_list = []
+        for image in image_list:
+            images_features_list.append(
+                self.feature_extractor.generate_feature_for_image(
+                    image
+                )
+            )
+        return images_features_list
+
+    def validate_signatures(self, image_list):
+        features_list = self._retrieve_features_for_image_list(
+            image_list
+        )
+        clustered_signatures = self.k_means_cluster.fit_predict(
+            features_list
+        )
+        similar_signatures = {"alike": [], "not_alike": []}
+        indx = 0
+        for cluster in clustered_signatures:
+            if cluster == 0:
+                similar_signatures["alike"].append(indx)
+            else:
+                similar_signatures["not_alike"].append(indx)
+            indx += 1
+        return similar_signatures
